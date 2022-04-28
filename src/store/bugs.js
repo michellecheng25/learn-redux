@@ -1,47 +1,92 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { createSelector } from "reselect";
+import { apiCallBegan } from "./api";
 
 //action + reducer with createSlice
-let lastId = 0;
+
 const slice = createSlice({
   name: "bugs",
-  initialState: [],
+  initialState: {
+    list: [],
+    loading: false,
+  },
   reducers: {
-    //actions => action handlers
+    bugsRequested: (bugs, action) => {
+      bugs.loading = true;
+    },
+
+    bugsRequestedFailed: (bugs, action) => {
+      bugs.loading = false;
+    },
+
+    bugsRecieved: (bugs, action) => {
+      bugs.list = action.payload;
+      bugs.loading = false;
+    },
+
     bugAssignedToUser: (bugs, action) => {
       const { bugId, userId } = action.payload;
-      const index = bugs.findIndex((bug) => bug.id === bugId);
+      const index = bugs.list.findIndex((bug) => bug.id === bugId);
       console.log(bugs[index]);
       bugs[index].userId = userId;
     },
     bugAdded: (bugs, action) => {
-      bugs.push({
-        id: ++lastId,
-        description: action.payload.description,
-        resolved: false,
-      });
+      bugs.list.push(action.payload);
     },
 
     bugResolved: (bugs, action) => {
-      const index = bugs.findIndex((bug) => bug.id === action.payload.id);
-
-      bugs[index].resolved = true;
+      const index = bugs.list.findIndex((bug) => bug.id === action.payload.id);
+      bugs.list[index].resolved = true;
     },
   },
 });
 
-export const { bugAdded, bugResolved, bugAssignedToUser } = slice.actions;
+const {
+  bugAdded,
+  bugResolved,
+  bugAssignedToUser,
+  bugsRecieved,
+  bugsRequested,
+  bugsRequestedFailed,
+} = slice.actions;
+
 export default slice.reducer;
+
+//Action creators
+const url = "/bugs";
+export const loadBugs = () =>
+  apiCallBegan({
+    url,
+    onStart: bugsRequested.type,
+    onSuccess: bugsRecieved.type,
+    onError: bugsRequestedFailed.type,
+  });
+
+export const addBug = (bug) =>
+  apiCallBegan({
+    url,
+    method: "post",
+    data: bug,
+    onSuccess: bugAdded.type,
+  });
+
+export const resolveBug = (id) =>
+  apiCallBegan({
+    url: url + "/" + id,
+    method: "patch",
+    data: { resolved: true },
+    onSuccess: bugResolved.type,
+  });
 
 //selector function and memoization
 export const getUnresolvedBugs = createSelector(
   (state) => state.entities.bugs,
   (state) => state.entities.projects,
-  (bugs, projects) => bugs.filter((bug) => !bug.resolved)
+  (bugs, projects) => bugs.list.filter((bug) => !bug.resolved)
 );
 
 export const getBugsByUser = (userId) =>
   createSelector(
     (state) => state.entities.bugs,
-    (bugs) => bugs.filter((bug) => bug.userId === userId)
+    (bugs) => bugs.list.filter((bug) => bug.userId === userId)
   );
